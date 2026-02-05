@@ -1,0 +1,424 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  CLIENT
+  ANIMATEUR
+}
+
+enum OrderStatus {
+  EN_ATTENTE
+  EN_COURS
+  LIVRE
+  ANNULE
+}
+
+enum SizeName {
+  XS
+  S
+  M
+  L
+  XL
+  XXL
+}
+
+enum TextLanguage {
+  FRENCH_ARABIC
+  ARABIC_ONLY
+  FRENCH_ONLY
+}
+
+enum ImageViewType {
+  AVANT
+  DOS
+  COTE
+}
+
+enum StockMovementType {
+  IN
+  OUT
+}
+
+enum ReturnReason {
+  ERREUR_IMPRESSION      // Printing error
+  MAUVAISE_TAILLE        // Wrong size
+  MAUVAISE_LANGUE        // Wrong language
+  PRODUIT_DEFECTUEUX     // Defective product
+  AUTRE                  // Other
+}
+
+enum ReturnStatus {
+  EN_ATTENTE    // Pending review
+  APPROUVE      // Approved
+  REFUSE        // Refused
+  EN_TRAITEMENT // Processing
+  TRAITE        // Completed
+}
+
+enum ReturnAction {
+  REIMPRESSION       // Reprint
+  CHANGEMENT_TAILLE  // Size change
+  AVOIR              // Credit
+  REMBOURSEMENT      // Refund
+}
+
+// =========================
+// USER MANAGEMENT
+// =========================
+
+model User {
+  id          String  @id @default(uuid()) @db.Uuid
+  firstName   String?
+  lastName    String?
+  email       String?
+  password    String?
+  phoneNumber String  @unique
+  address     String?
+  role        Role    @default(CLIENT)
+  
+  cart             Cart?
+  orders           Order[]
+  customOrders     CustomOrder[]
+  returns          Return[]
+  deletionRequests ProductDeletionRequest[]
+
+  @@map("Client")
+}
+
+// =========================
+// PRODUCT SCHEMA (REFACTORED)
+// =========================
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  code        String?  @unique @db.VarChar(1) // E, H, F, etc.
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  products Product[]
+  
+  @@map("categories")
+}
+
+model Size {
+  id        Int      @id @default(autoincrement())
+  name      SizeName @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  variants ProductVariant[]
+  
+  @@map("sizes")
+}
+
+model Product {
+  id          BigInt   @id @default(autoincrement())
+  code        String   @unique @db.VarChar(10) // T0, T1, T2, etc.
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  color       String   @db.VarChar(50)
+  price       Decimal  @db.Decimal(10, 2)
+  categoryId  Int      @map("category_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedBy   String?  @db.Uuid @map("deleted_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  category        Category                  @relation(fields: [categoryId], references: [id])
+  variants        ProductVariant[]
+  images          ProductImage[]
+  deletionRequest ProductDeletionRequest?
+  
+  @@map("products")
+}
+
+model ProductImage {
+  id        Int           @id @default(autoincrement())
+  productId BigInt        @map("product_id")
+  imageUrl  String        @db.VarChar(500) @map("image_url")
+  viewType  ImageViewType @default(AVANT) @map("view_type")
+  order     Int           @default(0) // Order of display within same viewType
+  createdAt DateTime      @default(now()) @map("created_at")
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  @@map("product_images")
+}
+
+model ProductDeletionRequest {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId BigInt   @unique @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @db.Uuid @map("created_by")
+  reason    String?  @db.Text
+  status    String   @default("PENDING") @db.VarChar(20) // PENDING | DELETED | RESTORED
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  admin   User?   @relation(fields: [createdBy], references: [id])
+  
+  @@map("product_deletion_requests")
+}
+
+model ProductVariant {
+  id        BigInt   @id @default(autoincrement())
+  productId BigInt   @map("product_id")
+  sizeId    Int      @map("size_id")
+  sku       String   @unique @db.VarChar(100)
+  stock     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size    Size    @relation(fields: [sizeId], references: [id])
+  
+  movements        StockMovement[]
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  customOrderItems CustomOrderItem[]
+  returnItemsNew   ReturnItem[]     @relation("ReturnItemNewVariant")
+  
+  @@unique([productId, sizeId])
+  @@map("product_variants")
+}
+
+model StockMovement {
+  id        BigInt            @id @default(autoincrement())
+  variantId BigInt            @map("variant_id")
+  quantity  Int
+  type      StockMovementType
+  reason    String?           @db.VarChar(255)
+  createdAt DateTime          @default(now()) @map("created_at")
+  
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  
+  @@map("stock_movements")
+}
+
+// =========================
+// CART SCHEMA
+// =========================
+
+model Cart {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @unique @map("user_id") @db.Uuid
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+  
+  @@map("carts")
+}
+
+model CartItem {
+  id        BigInt   @id @default(autoincrement())
+  cartId    String   @map("cart_id") @db.Uuid
+  variantId BigInt   @map("variant_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  personalizationId String? @unique @map("personalization_id") @db.Uuid
+  
+  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  personalization Personalization? @relation(fields: [personalizationId], references: [id], onDelete: SetNull)
+  
+  @@index([cartId, variantId])
+  @@map("cart_items")
+}
+
+// =========================
+// ORDER SCHEMA
+// =========================
+
+model Order {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
+  orderNumber String      @unique @map("order_number") @db.VarChar(50)
+  status      OrderStatus @default(EN_ATTENTE)
+  totalAmount Decimal     @map("total_amount") @db.Decimal(10, 2)
+  address     String      @db.Text
+  phoneNumber String      @map("phone_number") @db.VarChar(20)
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  user    User        @relation(fields: [userId], references: [id])
+  items   OrderItem[]
+  returns Return[]
+  
+  @@map("orders")
+}
+
+model OrderItem {
+  id         BigInt  @id @default(autoincrement())
+  orderId    String  @map("order_id") @db.Uuid
+  variantId  BigInt  @map("variant_id")
+  quantity   Int
+  unitPrice  Decimal @map("unit_price") @db.Decimal(10, 2)
+  totalPrice Decimal @map("total_price") @db.Decimal(10, 2)
+  personalizationId String? @unique @map("personalization_id") @db.Uuid
+  
+  order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  personalization Personalization? @relation(fields: [personalizationId], references: [id], onDelete: SetNull)
+  returnItems ReturnItem[]
+  
+  @@map("order_items")
+}
+
+// =========================
+// CUSTOM ORDERS (ANIMATEURS)
+// =========================
+
+model CustomOrder {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid // ANIMATEUR
+  orderNumber String      @unique @map("order_number") @db.VarChar(50)
+  status      OrderStatus @default(EN_ATTENTE)
+  totalAmount Decimal     @map("total_amount") @db.Decimal(10, 2)
+  hotelName   String?     @map("hotel_name") @db.VarChar(255)
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  
+  user    User              @relation(fields: [userId], references: [id])
+  items   CustomOrderItem[]
+  returns Return[]
+  
+  @@map("custom_orders")
+}
+
+model CustomOrderItem {
+  id              BigInt       @id @default(autoincrement())
+  customOrderId   String       @map("custom_order_id") @db.Uuid
+  variantId       BigInt       @map("variant_id")
+  printedName     String       @map("printed_name") @db.VarChar(255)
+  textLanguage    TextLanguage @map("text_language")
+  withDjerbaLogo  Boolean      @default(false) @map("with_djerba_logo")
+  quantity        Int          @default(1)
+  unitPrice       Decimal      @map("unit_price") @db.Decimal(10, 2)
+  totalPrice      Decimal      @map("total_price") @db.Decimal(10, 2)
+  personalizationId String? @unique @map("personalization_id") @db.Uuid
+  
+  customOrder CustomOrder    @relation(fields: [customOrderId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  personalization Personalization? @relation(fields: [personalizationId], references: [id], onDelete: SetNull)
+  returnItems ReturnItem[]
+  
+  @@map("custom_order_items")
+}
+
+// =========================
+// PERSONALIZATION (EDITOR)
+// =========================
+
+model Personalization {
+  id        String        @id @default(uuid()) @db.Uuid
+  viewType  ImageViewType @default(AVANT) @map("viewType")
+  designJson Json?        @map("designJson") @db.JsonB
+  previewUrl String       @map("previewUrl") @db.VarChar(500)
+  printUrl   String       @map("printUrl") @db.VarChar(500)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  customOrderItems CustomOrderItem[]
+
+  @@map("personalizations")
+}
+
+// =========================
+// RETURN MANAGEMENT SCHEMA
+// =========================
+
+model Return {
+  id              String       @id @default(uuid()) @db.Uuid
+  returnNumber    String       @unique @map("return_number") @db.VarChar(50)
+  orderId         String?      @map("order_id") @db.Uuid
+  customOrderId   String?      @map("custom_order_id") @db.Uuid
+  userId          String       @map("user_id") @db.Uuid // Animateur or client
+  reason          ReturnReason
+  status          ReturnStatus @default(EN_ATTENTE)
+  adminComment    String?      @map("admin_comment") @db.Text
+  userComment     String?      @map("user_comment") @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  processedAt     DateTime?    @map("processed_at")
+  
+  order       Order?       @relation(fields: [orderId], references: [id])
+  customOrder CustomOrder? @relation(fields: [customOrderId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  items       ReturnItem[]
+  
+  @@map("returns")
+}
+
+model ReturnItem {
+  id                BigInt        @id @default(autoincrement())
+  returnId          String        @map("return_id") @db.Uuid
+  orderItemId       BigInt?       @map("order_item_id")
+  customOrderItemId BigInt?       @map("custom_order_item_id")
+  quantityReturned  Int           @map("quantity_returned")
+  action            ReturnAction?
+  newVariantId      BigInt?       @map("new_variant_id") // For size changes
+  refundAmount      Decimal?      @map("refund_amount") @db.Decimal(10, 2)
+  processed         Boolean       @default(false)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  
+  return          Return              @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderItem       OrderItem?          @relation(fields: [orderItemId], references: [id])
+  customOrderItem CustomOrderItem?    @relation(fields: [customOrderItemId], references: [id])
+  newVariant      ProductVariant?     @relation("ReturnItemNewVariant", fields: [newVariantId], references: [id], onDelete: Restrict)
+  
+  @@map("return_items")
+}
+
+// =========================
+// CAROUSEL MANAGEMENT
+// =========================
+
+model CarouselSlide {
+  id        Int      @id @default(autoincrement())
+  title     String?  @db.VarChar(120)
+  subtitle  String?  @db.VarChar(220)
+  imageUrl  String   @map("image_url") @db.VarChar(500)
+  link      String?  @db.VarChar(500)
+  order     Int      @default(0)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("carousel_slides")
+}
+
+// =========================
+// ALBUM TEMPLATES (EDITOR)
+// =========================
+
+model AlbumTemplate {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(120)
+  imageUrl  String   @map("image_url") @db.VarChar(500)
+  tags      String?  @db.VarChar(255)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("album_templates")
+}

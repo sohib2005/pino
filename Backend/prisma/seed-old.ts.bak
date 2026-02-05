@@ -1,0 +1,389 @@
+import { PrismaClient, Role } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
+import * as bcrypt from 'bcrypt';
+import 'dotenv/config';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+async function main() {
+  // Hash passwords
+  const hashedPassword = await bcrypt.hash('password123', 10);
+
+  // Create admin user
+  const admin = await prisma.user.upsert({
+    where: { phoneNumber: '11111111' },
+    update: {},
+    create: {
+      firstName: 'Admin',
+      lastName: 'User',
+      email: 'admin@pino.com',
+      phoneNumber: '11111111',
+      password: hashedPassword,
+      address: 'Admin Address',
+      role: Role.ADMIN,
+    },
+  });
+
+  // Create client user
+  const client = await prisma.user.upsert({
+    where: { phoneNumber: '50770418' },
+    update: {},
+    create: {
+      firstName: 'Sohib',
+      lastName: 'Ben Ghiline',
+      email: 'sohibbenghiline@gmail.com',
+      phoneNumber: '50770418',
+      password: hashedPassword,
+      address: 'Djerba',
+      role: Role.CLIENT,
+    },
+  });
+
+  console.log('Seed data created successfully!');
+  console.log('Admin:', admin);
+  console.log('Client:', client);
+  console.log('\nLogin credentials:');
+  console.log('Admin - Phone: 11111111, Password: password123');
+  console.log('Client - Phone: 50770418, Password: password123');
+
+  // ============= SEED PRODUCTS =============
+  console.log('\n🌱 Seeding product data...');
+
+  // Create categories
+  const categories = await Promise.all([
+    prisma.category.upsert({
+      where: { slug: 't-shirts' },
+      update: {},
+      create: {
+        name: 'T-shirts',
+        slug: 't-shirts',
+      },
+    }),
+    prisma.category.upsert({
+      where: { slug: 'sweats' },
+      update: {},
+      create: {
+        name: 'Sweats',
+        slug: 'sweats',
+      },
+    }),
+    prisma.category.upsert({
+      where: { slug: 'casquettes' },
+      update: {},
+      create: {
+        name: 'Casquettes',
+        slug: 'casquettes',
+      },
+    }),
+    prisma.category.upsert({
+      where: { slug: 'accessoires' },
+      update: {},
+      create: {
+        name: 'Accessoires',
+        slug: 'accessoires',
+      },
+    }),
+  ]);
+
+  console.log('✅ Categories created');
+
+  // Create attributes
+  const colorAttr = await prisma.attribute.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { name: 'Couleur' },
+  });
+
+  const sizeAttr = await prisma.attribute.upsert({
+    where: { id: 2 },
+    update: {},
+    create: { name: 'Taille' },
+  });
+
+  const volumeAttr = await prisma.attribute.upsert({
+    where: { id: 3 },
+    update: {},
+    create: { name: 'Volume' },
+  });
+
+  // Create attribute values
+  const colors = ['Blanc', 'Noir', 'Bleu', 'Gris', 'Rouge', 'Bleu marine', 'Bordeaux', 'Naturel', 'Gris chiné'];
+  const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Unique'];
+  const volumes = ['330ml', '450ml'];
+
+  for (const color of colors) {
+    await prisma.attributeValue.upsert({
+      where: { 
+        attributeId_value: {
+          attributeId: colorAttr.id,
+          value: color,
+        }
+      },
+      update: {},
+      create: {
+        attributeId: colorAttr.id,
+        value: color,
+      },
+    });
+  }
+
+  for (const size of sizes) {
+    await prisma.attributeValue.upsert({
+      where: { 
+        attributeId_value: {
+          attributeId: sizeAttr.id,
+          value: size,
+        }
+      },
+      update: {},
+      create: {
+        attributeId: sizeAttr.id,
+        value: size,
+      },
+    });
+  }
+
+  for (const volume of volumes) {
+    await prisma.attributeValue.upsert({
+      where: { 
+        attributeId_value: {
+          attributeId: volumeAttr.id,
+          value: volume,
+        }
+      },
+      update: {},
+      create: {
+        attributeId: volumeAttr.id,
+        value: volume,
+      },
+    });
+  }
+
+  console.log('✅ Attributes and values created');
+
+  // Get attribute values for easy reference
+  const getAttributeValue = async (attrName: string, value: string) => {
+    const attribute = await prisma.attribute.findFirst({ where: { name: attrName } });
+    if (!attribute) return null;
+    return prisma.attributeValue.findFirst({
+      where: { attributeId: attribute.id, value },
+    });
+  };
+
+  // Create sample products
+  const tshirtCategory = categories[0];
+  const sweatsCategory = categories[1];
+  const accessoiresCategory = categories[3];
+
+  // T-shirt Product
+  const tshirtProduct = await prisma.product.create({
+    data: {
+      name: 'T-shirt Premium Pino',
+      slug: 't-shirt-premium-pino',
+      description: 'T-shirt en coton premium 100% personnalisable avec impression haute définition. Confortable et durable.',
+      categoryId: tshirtCategory.id,
+      isActive: true,
+      images: {
+        create: [
+          { imageUrl: '/imgs/tshirt-1.jpg', position: 0 },
+          { imageUrl: '/imgs/tshirt-1-back.jpg', position: 1 },
+        ],
+      },
+    },
+  });
+
+  // T-shirt variants with attributes
+  const blancM = await getAttributeValue('Couleur', 'Blanc');
+  const noirM = await getAttributeValue('Couleur', 'Noir');
+  const sizeM = await getAttributeValue('Taille', 'M');
+  const sizeL = await getAttributeValue('Taille', 'L');
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'TSHIRT-BLANC-M',
+      price: 24.99,
+      stock: 50,
+      productId: tshirtProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: blancM!.id },
+          { attributeValueId: sizeM!.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'TSHIRT-NOIR-M',
+      price: 24.99,
+      stock: 45,
+      productId: tshirtProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: noirM!.id },
+          { attributeValueId: sizeM!.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'TSHIRT-BLANC-L',
+      price: 24.99,
+      stock: 40,
+      productId: tshirtProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: blancM!.id },
+          { attributeValueId: sizeL!.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'TSHIRT-NOIR-L',
+      price: 24.99,
+      stock: 35,
+      productId: tshirtProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: noirM!.id },
+          { attributeValueId: sizeL!.id },
+        ],
+      },
+    },
+  });
+
+  // Hoodie Product
+  const hoodieProduct = await prisma.product.create({
+    data: {
+      name: 'Sweat à Capuche Premium',
+      slug: 'sweat-capuche-premium',
+      description: 'Sweat à capuche ultra-confortable avec poche kangourou. Idéal pour vos designs personnalisés.',
+      categoryId: sweatsCategory.id,
+      isActive: true,
+      images: {
+        create: [
+          { imageUrl: '/imgs/hoodie-1.jpg', position: 0 },
+          { imageUrl: '/imgs/hoodie-1-detail.jpg', position: 1 },
+        ],
+      },
+    },
+  });
+
+  const gris = await getAttributeValue('Couleur', 'Gris');
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'HOODIE-NOIR-M',
+      price: 44.99,
+      stock: 30,
+      productId: hoodieProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: noirM!.id },
+          { attributeValueId: sizeM!.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'HOODIE-GRIS-M',
+      price: 44.99,
+      stock: 25,
+      productId: hoodieProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: gris!.id },
+          { attributeValueId: sizeM!.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'HOODIE-NOIR-L',
+      price: 44.99,
+      stock: 28,
+      productId: hoodieProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: noirM!.id },
+          { attributeValueId: sizeL!.id },
+        ],
+      },
+    },
+  });
+
+  // Mug Product
+  const mugProduct = await prisma.product.create({
+    data: {
+      name: 'Mug Céramique Premium',
+      slug: 'mug-ceramique-premium',
+      description: 'Mug en céramique blanche avec impression haute qualité. Résistant au lave-vaisselle.',
+      categoryId: accessoiresCategory.id,
+      isActive: true,
+      images: {
+        create: [
+          { imageUrl: '/imgs/mug-1.jpg', position: 0 },
+          { imageUrl: '/imgs/mug-1-detail.jpg', position: 1 },
+        ],
+      },
+    },
+  });
+
+  const vol330 = await getAttributeValue('Volume', '330ml');
+  const vol450 = await getAttributeValue('Volume', '450ml');
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'MUG-BLANC-330ML',
+      price: 12.99,
+      stock: 100,
+      productId: mugProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: blancM!.id },
+          { attributeValueId: vol330!.id },
+        ],
+      },
+    },
+  });
+
+  await prisma.productVariant.create({
+    data: {
+      sku: 'MUG-BLANC-450ML',
+      price: 14.99,
+      stock: 80,
+      productId: mugProduct.id,
+      attributes: {
+        create: [
+          { attributeValueId: blancM!.id },
+          { attributeValueId: vol450!.id },
+        ],
+      },
+    },
+  });
+
+  console.log('✅ Sample products created');
+  console.log('✨ Product seeding completed!');
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pino - Impression Numérique Personnalisée</title>
+    <style>
+        /* Reset & Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Pino Brand Colors */
+            --pino-blue: #4AC4E5;
+            --pino-blue-light: #6FD4ED;
+            --pino-blue-dark: #2BAED1;
+            --pino-blue-subtle: #E6F7FC;
+            
+            /* Neutrals */
+            --white: #FFFFFF;
+            --gray-50: #F9FAFB;
+            --gray-100: #F3F4F6;
+            --gray-600: #4B5563;
+            --gray-900: #111827;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-pino: 0 4px 12px rgba(74, 196, 229, 0.3);
+            --shadow-pino-lg: 0 6px 16px rgba(74, 196, 229, 0.4);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+            color: var(--gray-900);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Header Styles */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .header.scrolled {
+            box-shadow: var(--shadow-md);
+        }
+
+        .header-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 80px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            color: var(--gray-900);
+            transition: color 0.2s ease;
+        }
+
+        .logo:hover {
+            color: var(--pino-blue);
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--pino-blue), var(--pino-blue-dark));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.25rem;
+            transition: transform 0.2s ease;
+        }
+
+        .logo:hover .logo-icon {
+            transform: scale(1.05);
+        }
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-link {
+            color: var(--gray-600);
+            text-decoration: none;
+            font-weight: 500;
+            position: relative;
+            transition: color 0.2s ease;
+        }
+
+        .nav-link:hover {
+            color: var(--pino-blue);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--pino-blue);
+            transition: width 0.2s ease;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 0.625rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-link {
+            background: transparent;
+            color: var(--gray-600);
+        }
+
+        .btn-link:hover {
+            color: var(--gray-900);
+        }
+
+        .btn-primary {
+            background: var(--pino-blue);
+            color: white;
+            box-shadow: var(--shadow-pino);
+        }
+
+        .btn-primary:hover {
+            background: var(--pino-blue-dark);
+            box-shadow: var(--shadow-pino-lg);
+            transform: scale(1.05);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: var(--pino-blue);
+            border: 2px solid var(--pino-blue);
+        }
+
+        .btn-secondary:hover {
+            background: var(--pino-blue-subtle);
+            border-color: var(--pino-blue-dark);
+            transform: scale(1.05);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 10rem 2rem 5rem;
+            background: linear-gradient(to bottom, var(--gray-50), white);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before,
+        .hero::after {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: var(--pino-blue-subtle);
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.5;
+        }
+
+        .hero::before {
+            top: 5rem;
+            right: 0;
+        }
+
+        .hero::after {
+            bottom: 0;
+            left: 0;
+        }
+
+        .hero-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--pino-blue-subtle);
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            color: var(--pino-blue);
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero-title {
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            color: var(--gray-900);
+        }
+
+        .hero-title .highlight {
+            color: var(--pino-blue);
+            position: relative;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--gray-600);
+            max-width: 800px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.6;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 4rem;
+        }
+
+        .cta-buttons .btn {
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Trust Indicators */
+        .trust-section {
+            margin-top: 4rem;
+            padding-top: 3rem;
+            border-top: 1px solid var(--gray-100);
+        }
+
+        .trust-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .trust-item {
+            text-align: center;
+        }
+
+        .trust-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--pino-blue);
+            margin-bottom: 0.25rem;
+        }
+
+        .trust-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate {
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        .delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .delay-3 { animation-delay: 0.3s; opacity: 0; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .hero-title {
+                font-size: 2rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+            }
+
+            .cta-buttons .btn {
+                width: 100%;
+            }
+
+            .trust-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header" id="header">
+        <div class="header-container">
+            <!-- Logo -->
+            <a href="/" class="logo">
+                <div class="logo-icon">P</div>
+                <span class="logo-text">pino</span>
+            </a>
+
+            <!-- Navigation -->
+            <nav>
+                <ul class="nav-menu">
+                    <li><a href="/personnaliser" class="nav-link">Personnaliser</a></li>
+                    <li><a href="/boutique" class="nav-link">Boutique</a></li>
+                    <li><a href="/grandes-commandes" class="nav-link">Grandes commandes</a></li>
+                </ul>
+            </nav>
+
+            <!-- Auth Buttons -->
+            <div class="auth-buttons">
+                <a href="/login" class="btn btn-link">Se connecter</a>
+                <a href="/signup" class="btn btn-primary">S'inscrire</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <!-- Badge -->
+            <div class="badge animate">
+                ✓ Qualité professionnelle garantie
+            </div>
+
+            <!-- Main Headline -->
+            <h1 class="hero-title animate delay-1">
+                Créez vos <span class="highlight">vêtements personnalisés</span><br>
+                avec une qualité <span class="highlight">professionnelle</span>
+            </h1>
+
+            <!-- Subheadline -->
+            <p class="hero-subtitle animate delay-2">
+                Impression numérique haute définition sur pulls, t-shirts et vêtements.
+                Livraison rapide, petites et grandes séries. Donnez vie à vos créations dès aujourd'hui.
+            </p>
+
+            <!-- CTA Buttons -->
+            <div class="cta-buttons animate delay-3">
+                <a href="/personnaliser" class="btn btn-primary">
+                    Personnaliser maintenant
+                    <span>→</span>
+                </a>
+                <a href="/boutique" class="btn btn-secondary">
+                    Voir la boutique
+                    <span>🛒</span>
+                </a>
+            </div>
+
+            <!-- Trust Indicators -->
+            <div class="trust-section">
+                <div class="trust-grid">
+                    <div class="trust-item">
+                        <div class="trust-number">2000+</div>
+                        <div class="trust-label">Clients satisfaits</div>
+                    </div>
+                    <div class="trust-item">
+                        <div class="trust-number">48h</div>
+                        <div class="trust-label">Livraison rapide</div>
+                    </div>
+                    <div class="trust-item">
+                        <div class="trust-number">100%</div>
+                        <div class="trust-label">Qualité garantie</div>
+                    </div>
+                    <div class="trust-item">
+                        <div class="trust-number">24/7</div>
+                        <div class="trust-label">Support client</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- JavaScript for scroll effect -->
+    <script>
+        // Add scroll effect to header
+        window.addEventListener('scroll', () => {
+            const header = document.getElementById('header');
+            if (window.scrollY > 20) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+        });
+    </script>
+</body>
+</html>

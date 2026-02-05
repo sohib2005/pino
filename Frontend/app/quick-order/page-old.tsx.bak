@@ -1,0 +1,392 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Product as ApiProduct, productsApi } from '@/lib/api';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import Header from '../components/Header';
+import CustomAlert from '../components/CustomAlert';
+import { useCustomAlert } from '../hooks/useCustomAlert';
+
+interface Product extends ApiProduct {
+  variants?: any[];
+}
+
+interface OrderItem {
+  variantId: number;
+  quantity: number;
+  product: Product;
+  variant: any;
+  size: string;
+  sku: string;
+}
+
+export default function QuickOrderPage() {
+  const router = useRouter();
+  const { alertConfig, isOpen, hideAlert, showSuccess, showError, showWarning } = useCustomAlert();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [orderData, setOrderData] = useState({
+    firstName: '',
+    lastName: '',
+    phoneNumber: '',
+    address: '',
+    notes: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    // Check if user is ANIMATEUR and redirect them
+    const clientData = localStorage.getItem('client') || sessionStorage.getItem('client');
+    if (clientData) {
+      const parsedClient = JSON.parse(clientData);
+      if (parsedClient.role === 'ANIMATEUR') {
+        showError('Les animateurs doivent utiliser la section "Grandes Commandes"');
+        setTimeout(() => router.push('/grandes-commandes'), 2000);
+        return;
+      }
+    }
+    
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const data = await productsApi.getAll();
+      setProducts(data.filter(p => p.isActive));
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      showError('Erreur lors du chargement des produits');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addToOrder = (product: Product, variant: any) => {
+    const existingItem = orderItems.find(item => item.variantId === variant.id);
+    if (existingItem) {
+      setOrderItems(orderItems.map(item =>
+        item.variantId === variant.id
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
+    } else {
+      setOrderItems([...orderItems, { 
+        variantId: variant.id, 
+        quantity: 1, 
+        product,
+        variant,
+        size: variant.size?.name || variant.size,
+        sku: variant.sku
+      }]);
+    }
+  };
+
+  const updateQuantity = (variantId: number, quantity: number) => {
+    if (quantity <= 0) {
+      setOrderItems(orderItems.filter(item => item.variantId !== variantId));
+    } else {
+      setOrderItems(orderItems.map(item =>
+        item.variantId === variantId ? { ...item, quantity } : item
+      ));
+    }
+  };
+
+  const removeItem = (variantId: number) => {
+    setOrderItems(orderItems.filter(item => item.variantId !== variantId));
+  };
+
+  const calculateTotal = () => {
+    return orderItems.reduce((sum, item) => {
+      const price = typeof item.product.price === 'string' ? parseFloat(item.product.price) : item.product.price;
+      return sum + (price * item.quantity);
+    }, 0);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (orderItems.length === 0) {
+      showWarning('Veuillez ajouter au moins un article à votre commande');
+      return;
+    }
+
+    if (!orderData.firstName || !orderData.lastName || !orderData.phoneNumber || !orderData.address) {
+      showWarning('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('http://localhost:3001/orders/guest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: orderData.firstName,
+          lastName: orderData.lastName,
+          phoneNumber: orderData.phoneNumber,
+          address: orderData.address,
+          notes: orderData.notes,
+          items: orderItems.map(item => ({
+            variantId: item.variantId.toString(),
+            quantity: item.quantity,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erreur lors de la création de la commande');
+      }
+
+      const order = await response.json();
+      showSuccess(`Commande créée avec succès ! Numéro: ${order.orderNumber}`);
+      
+      // Reset form
+      setOrderItems([]);
+      setOrderData({
+        firstName: '',
+        lastName: '',
+        phoneNumber: '',
+        address: '',
+        notes: '',
+      });
+
+      setTimeout(() => {
+        window.location.href = '/boutique';
+      }, 2000);
+    } catch (error: any) {
+      console.error('Error creating order:', error);
+      showError(error.message || 'Erreur lors de la création de la commande');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Group products by color
+  const productsGroupedByColor: Record<string, Product[]> = {};
+  
+  products.forEach(product => {
+    if (!productsGroupedByColor[product.color]) {
+      productsGroupedByColor[product.color] = [];
+    }
+    productsGroupedByColor[product.color].push(product);
+  });
+
+  return (
+    <>
+      <Header />
+      <CustomAlert 
+        isOpen={isOpen} 
+        onClose={hideAlert}
+        message={alertConfig?.message || ''}
+        title={alertConfig?.title}
+        type={alertConfig?.type}
+        onConfirm={alertConfig?.onConfirm}
+        confirmText={alertConfig?.confirmText}
+        cancelText={alertConfig?.cancelText}
+      />
+      <main className="min-h-screen pt-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Commande Rapide
+            </h1>
+            <p className="text-gray-800 text-lg">
+              Passez votre commande rapidement sans créer de compte
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Products Selection */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="text-xl font-bold mb-4">Sélectionnez vos articles</h2>
+                
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pino-blue mx-auto"></div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {products.map((product) => (
+                      <div key={product.id} className="border-b pb-4">
+                        <div className="flex items-center gap-3 mb-3">
+                          {product.imageUrl && (
+                            <img src={product.imageUrl} alt={product.name} className="w-16 h-16 object-cover rounded" />
+                          )}
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{product.name}</h3>
+                            <p className="text-sm text-gray-800 font-medium">{product.color} - {product.price} DT</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                          {product.variants && product.variants.length > 0 ? (
+                            product.variants.map((variant: any) => (
+                              <button
+                                key={variant.id}
+                                onClick={() => addToOrder(product, variant)}
+                                className="p-2 border border-gray-200 rounded-lg hover:border-pino-blue hover:shadow-md transition-all duration-200 text-center"
+                                disabled={variant.stock === 0}
+                              >
+                                <div className="text-sm font-semibold text-gray-900">{variant.size?.name || variant.size}</div>
+                                <div className="text-xs text-gray-700 mt-1 font-medium">Stock: {variant.stock}</div>
+                                {variant.stock === 0 && (
+                                  <div className="text-xs text-red-500 mt-1">Rupture</div>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-400 col-span-full">Aucune taille disponible</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Order Summary & Form */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-lg shadow-md p-6 sticky top-24">
+                <h2 className="text-xl font-bold mb-4">Votre commande</h2>
+
+                {orderItems.length === 0 ? (
+                  <p className="text-gray-500 text-sm">Aucun article sélectionné</p>
+                ) : (
+                  <>
+                    <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+                      {orderItems.map((item) => (
+                        <div key={item.variantId} className="flex items-center justify-between text-sm border-b pb-2">
+                          <div className="flex-1">
+                            <div className="font-semibold">{item.product.color} - {item.size}</div>
+                            <div className="text-xs text-gray-500">{item.sku}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
+                              className="w-6 h-6 flex items-center justify-center bg-gray-100 rounded hover:bg-gray-200"
+                            >
+                              -
+                            </button>
+                            <span className="w-8 text-center">{item.quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
+                              className="w-6 h-6 flex items-center justify-center bg-gray-100 rounded hover:bg-gray-200"
+                            >
+                              +
+                            </button>
+                            <button
+                              onClick={() => removeItem(item.variantId)}
+                              className="ml-2 text-red-500 hover:text-red-700"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border-t pt-3 mb-4">
+                      <div className="flex justify-between text-lg font-bold">
+                        <span>Total</span>
+                        <span>{calculateTotal().toFixed(2)} DT</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-4 mt-6">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-gray-800">
+                      Prénom <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={orderData.firstName}
+                      onChange={(e) => setOrderData({ ...orderData, firstName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pino-blue"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-gray-800">
+                      Nom <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={orderData.lastName}
+                      onChange={(e) => setOrderData({ ...orderData, lastName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pino-blue"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-gray-800">
+                      Numéro de téléphone <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={orderData.phoneNumber}
+                      onChange={(e) => setOrderData({ ...orderData, phoneNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pino-blue"
+                      placeholder="Ex: 50770418"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-gray-800">
+                      Adresse <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={orderData.address}
+                      onChange={(e) => setOrderData({ ...orderData, address: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pino-blue"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-1 text-gray-800">
+                      Notes (optionnel)
+                    </label>
+                    <textarea
+                      value={orderData.notes}
+                      onChange={(e) => setOrderData({ ...orderData, notes: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pino-blue"
+                      rows={2}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || orderItems.length === 0}
+                    className="w-full bg-pino-blue text-white font-semibold py-3 rounded-lg hover:bg-pino-blue-dark transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? 'En cours...' : 'Confirmer la commande'}
+                  </button>
+
+                  <Link
+                    href="/boutique"
+                    className="block text-center text-sm text-gray-800 hover:text-pino-blue mt-3 font-medium"
+                  >
+                    Retour à la boutique
+                  </Link>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </>
+  );
+}

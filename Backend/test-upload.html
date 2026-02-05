@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Upload Image</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .container {
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #preview {
+            margin-top: 20px;
+            max-width: 300px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Upload Image</h1>
+        <p>Ce fichier teste l'upload d'images vers le backend</p>
+        
+        <input type="file" id="fileInput" accept="image/*">
+        <br>
+        <button onclick="uploadImage()">Upload Image</button>
+        
+        <div id="result"></div>
+        <img id="preview" style="display:none;">
+    </div>
+
+    <script>
+        async function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            const resultDiv = document.getElementById('result');
+            const preview = document.getElementById('preview');
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                resultDiv.textContent = 'Veuillez sélectionner un fichier';
+                resultDiv.style.color = 'red';
+                return;
+            }
+            
+            console.log('File selected:', file.name, file.size, file.type);
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            resultDiv.textContent = 'Upload en cours...';
+            resultDiv.style.color = 'blue';
+            
+            try {
+                console.log('Sending to backend...');
+                const response = await fetch('http://localhost:3001/products/upload-image', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                resultDiv.textContent = `✅ Upload réussi!\n\nURL: ${data.imageUrl}\nPath: ${data.imagePath}\n\n🔗 Test URL in browser:\n${data.imageUrl}`;
+                resultDiv.style.color = 'green';
+                
+                // Show preview
+                preview.src = data.imageUrl;
+                preview.style.display = 'block';
+                preview.alt = `Preview of ${data.imageUrl}`;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.textContent = `❌ Erreur: ${error.message}`;
+                resultDiv.style.color = 'red';
+            }
+        }
+    </script>
+</body>
+</html>
