@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { OrderStatus, TextLanguage, Prisma, Role } from '@prisma/client';
+import { OrderStatus, TextLanguage, Prisma, Role, StockMovementType } from '@prisma/client';
 
 @Injectable()
 export class CustomOrderService {
@@ -70,55 +70,85 @@ export class CustomOrderService {
     // Generate unique order number
     const orderNumber = `GC-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-    // Create custom order
-    const customOrder = await this.prisma.customOrder.create({
-      data: {
-        userId,
-        orderNumber,
-        status: OrderStatus.EN_ATTENTE,
-        totalAmount,
-        hotelName: data.hotelName,
-        notes: data.notes,
-        items: {
-          create: data.items.map((item) => {
-            const variant = variants.find(v => v.id === BigInt(item.variantId))!;
-            return {
-              variantId: BigInt(item.variantId),
-              printedName: item.printedName,
-              textLanguage: item.textLanguage,
-              withDjerbaLogo: item.withDjerbaLogo,
-              quantity: item.quantity,
-              unitPrice: variant.product.price,
-              totalPrice: variant.product.price.mul(new Prisma.Decimal(item.quantity)),
-            };
-          }),
+    const customOrder = await this.prisma.$transaction(async (prisma) => {
+      for (const item of data.items) {
+        const updated = await prisma.productVariant.updateMany({
+          where: {
+            id: BigInt(item.variantId),
+            stock: { gte: item.quantity },
+          },
+          data: {
+            stock: {
+              decrement: item.quantity,
+            },
+          },
+        });
+
+        if (updated.count === 0) {
+          const variant = variants.find(v => v.id === BigInt(item.variantId));
+          const sku = variant?.sku ?? 'inconnu';
+          throw new BadRequestException(`Stock insuffisant pour ${sku}`);
+        }
+
+        await prisma.stockMovement.create({
+          data: {
+            variantId: BigInt(item.variantId),
+            quantity: item.quantity,
+            type: StockMovementType.OUT,
+            reason: `Custom order ${orderNumber}`,
+          },
+        });
+      }
+
+      return prisma.customOrder.create({
+        data: {
+          userId,
+          orderNumber,
+          status: OrderStatus.EN_ATTENTE,
+          totalAmount,
+          hotelName: data.hotelName,
+          notes: data.notes,
+          items: {
+            create: data.items.map((item) => {
+              const variant = variants.find(v => v.id === BigInt(item.variantId))!;
+              return {
+                variantId: BigInt(item.variantId),
+                printedName: item.printedName,
+                textLanguage: item.textLanguage,
+                withDjerbaLogo: item.withDjerbaLogo,
+                quantity: item.quantity,
+                unitPrice: variant.product.price,
+                totalPrice: variant.product.price.mul(new Prisma.Decimal(item.quantity)),
+              };
+            }),
+          },
         },
-      },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: {
-                    category: true,
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
                   },
+                  size: true,
                 },
-                size: true,
               },
             },
           },
-        },
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phoneNumber: true,
-            address: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phoneNumber: true,
+              address: true,
+            },
           },
         },
-      },
+      });
     });
 
     return customOrder;
@@ -205,31 +235,32 @@ export class CustomOrderService {
   }
 
   async updateCustomOrderStatus(orderId: string, status: OrderStatus) {
-    return this.prisma.customOrder.update({
-      where: { id: orderId },
-      data: { status },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: {
-                    category: true,
+    if (status !== OrderStatus.ANNULE) {
+      return this.prisma.customOrder.update({
+        where: { id: orderId },
+        data: { status },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
                   },
+                  size: true,
                 },
-                size: true,
               },
             },
           },
         },
-      },
-    });
-  }
+      });
+    }
 
-  async cancelCustomOrder(userId: string, orderId: string) {
-    const customOrder = await this.prisma.customOrder.findFirst({
-      where: { id: orderId, userId },
+    const customOrder = await this.prisma.customOrder.findUnique({
+      where: { id: orderId },
+      include: { items: true },
     });
 
     if (!customOrder) {
@@ -240,9 +271,149 @@ export class CustomOrderService {
       throw new BadRequestException('Impossible d\'annuler une commande déjà livrée');
     }
 
-    return this.prisma.customOrder.update({
-      where: { id: orderId },
-      data: { status: OrderStatus.ANNULE },
+    if (customOrder.status === OrderStatus.ANNULE) {
+      return this.prisma.customOrder.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      for (const item of customOrder.items) {
+        await prisma.productVariant.update({
+          where: { id: item.variantId },
+          data: {
+            stock: {
+              increment: item.quantity,
+            },
+          },
+        });
+
+        await prisma.stockMovement.create({
+          data: {
+            variantId: item.variantId,
+            quantity: item.quantity,
+            type: StockMovementType.IN,
+            reason: `Annulation grande commande ${customOrder.orderNumber}`,
+          },
+        });
+      }
+
+      return prisma.customOrder.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.ANNULE },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+  }
+
+  async cancelCustomOrder(userId: string, orderId: string) {
+    const customOrder = await this.prisma.customOrder.findFirst({
+      where: { id: orderId, userId },
+      include: { items: true },
+    });
+
+    if (!customOrder) {
+      throw new NotFoundException('Commande non trouvée');
+    }
+
+    if (customOrder.status === OrderStatus.LIVRE) {
+      throw new BadRequestException('Impossible d\'annuler une commande déjà livrée');
+    }
+
+    if (customOrder.status === OrderStatus.ANNULE) {
+      return this.prisma.customOrder.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      for (const item of customOrder.items) {
+        await prisma.productVariant.update({
+          where: { id: item.variantId },
+          data: {
+            stock: {
+              increment: item.quantity,
+            },
+          },
+        });
+
+        await prisma.stockMovement.create({
+          data: {
+            variantId: item.variantId,
+            quantity: item.quantity,
+            type: StockMovementType.IN,
+            reason: `Annulation grande commande ${customOrder.orderNumber}`,
+          },
+        });
+      }
+
+      return prisma.customOrder.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.ANNULE },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
     });
   }
 }

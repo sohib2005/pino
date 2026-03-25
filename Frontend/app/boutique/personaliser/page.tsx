@@ -10,6 +10,7 @@ import PersonalizationEditor, {
   type PersonalizationEditorHandle,
 } from '@/app/components/personalization/PersonalizationEditor';
 import { cartApi, personalizationsApi, productsApi, uploadsApi, type Product } from '@/lib/api';
+import { savePendingPersonalizedCartItem } from '@/lib/pendingPersonalizedCart';
 import { useRouter } from 'next/navigation';
 
 function isWhiteTshirt(p: Product) {
@@ -183,6 +184,20 @@ export default function PersonaliserPage() {
         printUrl: frontPrintUpload.url,
         designJson,
       });
+
+      const clientData = localStorage.getItem('client') || sessionStorage.getItem('client');
+      const client = clientData ? JSON.parse(clientData) : null;
+
+      if (!client?.id) {
+        savePendingPersonalizedCartItem({
+          variantId: selectedVariant.id,
+          quantity,
+          personalizationId: personalization.id,
+        });
+        showWarning('Connectez-vous ou créez un compte pour finaliser l\'ajout au panier.');
+        setTimeout(() => router.push('/login?returnTo=/cart'), 500);
+        return;
+      }
 
       await cartApi.add(selectedVariant.id, quantity, personalization.id);
 

@@ -2,9 +2,18 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '../components/Header';
 
+function getSafeReturnPath(path: string | null): string {
+  if (!path || !path.startsWith('/')) return '/boutique';
+  if (path.startsWith('//')) return '/boutique';
+  return path;
+}
+
 export default function SignUpPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -19,6 +28,9 @@ export default function SignUpPage() {
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const returnTo = getSafeReturnPath(searchParams.get('returnTo'));
+  const loginHref = `/login?returnTo=${encodeURIComponent(returnTo)}`;
 
   const isFieldValid = (name: string, value: string) => {
     switch (name) {
@@ -107,7 +119,7 @@ export default function SignUpPage() {
       
       // Redirect to login after 2 seconds
       setTimeout(() => {
-        window.location.href = '/login';
+        router.push(loginHref);
       }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
@@ -394,7 +406,7 @@ export default function SignUpPage() {
                   Vous avez déjà un compte ? Connectez-vous !
                 </p>
                 <Link
-                  href="/login"
+                  href={loginHref}
                   className="inline-block px-8 py-3 bg-transparent border-2 border-white text-white font-semibold rounded-lg hover:bg-white hover:text-pino-blue transform hover:scale-105 transition-all duration-200"
                 >
                   SE CONNECTER

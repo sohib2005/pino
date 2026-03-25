@@ -107,25 +107,36 @@ export default function AdminProductsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       if (activeTab === 'products') {
-        const [productsData, categoriesData] = await Promise.all([
+        const [productsData, categoriesData, trashData] = await Promise.all([
           productsApi.getAll(undefined, showInactive, false), // Normal products
-          fetch('http://localhost:3001/categories').then(r => r.json())
+          fetch('http://localhost:3001/categories').then(r => r.json()),
+          productsApi.getTrash(),
         ]);
-        
+
         // Calculate total stock from variants for each product
         const productsWithStock = productsData.map(product => ({
           ...product,
-          stock: product.variants?.reduce((sum: number, variant: any) => sum + (variant.stock || 0), 0) || 0
+          stock: product.variants?.reduce((sum: number, variant: any) => sum + (variant.stock || 0), 0) || 0,
         }));
-        
+
         setProducts(productsWithStock);
         setCategories(categoriesData);
+        setTrashProducts(Array.isArray(trashData) ? trashData : []);
       } else {
-        // Trash tab
-        const trashData = await productsApi.getTrash();
-        setTrashProducts(trashData);
+        const [trashData, productsData] = await Promise.all([
+          productsApi.getTrash(),
+          productsApi.getAll(undefined, showInactive, false),
+        ]);
+
+        const productsWithStock = productsData.map(product => ({
+          ...product,
+          stock: product.variants?.reduce((sum: number, variant: any) => sum + (variant.stock || 0), 0) || 0,
+        }));
+
+        setTrashProducts(Array.isArray(trashData) ? trashData : []);
+        setProducts(productsWithStock);
       }
     } catch (error) {
       console.error('Error fetching data:', error);

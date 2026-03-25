@@ -2,17 +2,32 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '../components/Header';
+import { cartApi } from '@/lib/api';
+import {
+  clearPendingPersonalizedCartItem,
+  getPendingPersonalizedCartItem,
+} from '@/lib/pendingPersonalizedCart';
+
+function getSafeReturnPath(path: string | null): string {
+  if (!path || !path.startsWith('/')) return '/boutique';
+  if (path.startsWith('//')) return '/boutique';
+  return path;
+}
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const returnTo = getSafeReturnPath(searchParams.get('returnTo'));
+  const signupHref = `/signup?returnTo=${encodeURIComponent(returnTo)}`;
 
   const isPhoneDigits = /^\d*$/.test(phoneNumber);
   const showPhoneError = phoneTouched && phoneNumber.length > 0 && !isPhoneDigits;
@@ -50,8 +65,24 @@ export default function LoginPage() {
       // Save client data in localStorage
       sessionStorage.setItem('client', JSON.stringify(data.client));
 
+      const pendingItem = getPendingPersonalizedCartItem();
+      if (pendingItem) {
+        try {
+          await cartApi.add(pendingItem.variantId, pendingItem.quantity, pendingItem.personalizationId);
+          clearPendingPersonalizedCartItem();
+          router.push('/cart');
+          return;
+        } catch (pendingError: any) {
+          setError(
+            pendingError?.message ||
+              'Connexion réussie, mais l\'ajout automatique au panier a échoué. Réessayez depuis la personnalisation.'
+          );
+          return;
+        }
+      }
+
       // Redirect to home or dashboard
-      router.push('/boutique');
+      router.push(returnTo);
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la connexion');
     } finally {
@@ -192,7 +223,7 @@ export default function LoginPage() {
                   Vous n'avez pas de compte ? Créez-en un !
                 </p>
                 <Link
-                  href="/signup"
+                  href={signupHref}
                   className="inline-block px-8 py-3 bg-transparent border-2 border-white text-white font-semibold rounded-lg hover:bg-white hover:text-pino-blue transform hover:scale-105 transition-all duration-200"
                 >
                   CRÉER UN COMPTE

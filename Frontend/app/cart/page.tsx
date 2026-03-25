@@ -273,17 +273,19 @@ export default function CartPage() {
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         disabled={item.quantity <= 1}
-                        className="w-8 h-8 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50"
+                        className="w-9 h-9 rounded border-2 border-gray-300 bg-white text-gray-800 hover:border-pino-blue hover:text-pino-blue hover:bg-pino-blue/5 transition-colors disabled:opacity-40 disabled:text-gray-400 disabled:border-gray-200"
+                        aria-label="Diminuer la quantite"
                       >
-                        -
+                        <span className="text-lg font-semibold">-</span>
                       </button>
-                      <span className="w-12 text-center font-semibold">{item.quantity}</span>
+                      <span className="w-12 text-center font-semibold text-gray-900">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
                         disabled={item.quantity >= (item.variant?.stock || 0)}
-                        className="w-8 h-8 rounded border border-gray-300 hover:bg-gray-100 disabled:opacity-50"
+                        className="w-9 h-9 rounded border-2 border-gray-300 bg-white text-gray-800 hover:border-pino-blue hover:text-pino-blue hover:bg-pino-blue/5 transition-colors disabled:opacity-40 disabled:text-gray-400 disabled:border-gray-200"
+                        aria-label="Augmenter la quantite"
                       >
-                        +
+                        <span className="text-lg font-semibold">+</span>
                       </button>
                     </div>
                   </div>
@@ -307,7 +309,7 @@ export default function CartPage() {
                       <span>Gratuite</span>
                     </div>
                     <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-lg">
-                      <span>Total</span>
+                      <span className="text-gray-900 tracking-wide">Total</span>
                       <span className="text-pino-blue">{calculateTotal().toFixed(2)} DT</span>
                     </div>
                   </div>

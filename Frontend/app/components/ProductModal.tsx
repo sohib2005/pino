@@ -318,10 +318,11 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                    className="w-11 h-11 flex items-center justify-center rounded-lg border-2 border-gray-300 bg-white text-gray-800 hover:border-pino-blue hover:text-pino-blue hover:bg-pino-blue/5 transition-colors duration-200 disabled:opacity-40 disabled:text-gray-400 disabled:border-gray-200"
                     disabled={quantity <= 1}
+                    aria-label="Diminuer la quantite"
                   >
-                    <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24" stroke="currentColor">
                       <path d="M20 12H4" />
                     </svg>
                   </button>
@@ -335,10 +336,11 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                   />
                   <button
                     onClick={() => setQuantity(Math.min(availableStock, quantity + 1))}
-                    className="w-10 h-10 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
+                    className="w-11 h-11 flex items-center justify-center rounded-lg border-2 border-gray-300 bg-white text-gray-800 hover:border-pino-blue hover:text-pino-blue hover:bg-pino-blue/5 transition-colors duration-200 disabled:opacity-40 disabled:text-gray-400 disabled:border-gray-200"
                     disabled={quantity >= availableStock}
+                    aria-label="Augmenter la quantite"
                   >
-                    <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24" stroke="currentColor">
                       <path d="M12 4v16m8-8H4" />
                     </svg>
                   </button>

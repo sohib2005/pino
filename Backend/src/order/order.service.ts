@@ -222,25 +222,105 @@ export class OrderService {
   }
 
   async updateOrderStatus(orderId: string, status: OrderStatus) {
-    return this.prisma.order.update({
-      where: { id: orderId },
-      data: { status },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: {
-                    category: true,
+    if (status !== OrderStatus.ANNULE) {
+      return this.prisma.order.update({
+        where: { id: orderId },
+        data: { status },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
                   },
+                  size: true,
                 },
-                size: true,
               },
             },
           },
         },
-      },
+      });
+    }
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    if (!order) {
+      throw new BadRequestException('Commande non trouvée');
+    }
+
+    if (order.status === OrderStatus.LIVRE) {
+      throw new BadRequestException('Impossible d\'annuler une commande déjà livrée');
+    }
+
+    if (order.status === OrderStatus.ANNULE) {
+      return this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    return this.prisma.$transaction(async (prisma) => {
+      for (const item of order.items) {
+        await prisma.productVariant.update({
+          where: { id: item.variantId },
+          data: {
+            stock: {
+              increment: item.quantity,
+            },
+          },
+        });
+
+        await prisma.stockMovement.create({
+          data: {
+            variantId: item.variantId,
+            quantity: item.quantity,
+            type: StockMovementType.IN,
+            reason: `Annulation commande ${order.orderNumber}`,
+          },
+        });
+      }
+
+      return prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.ANNULE },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
     });
   }
 
@@ -251,11 +331,33 @@ export class OrderService {
     });
 
     if (!order) {
-      throw new Error('Commande non trouvée');
+      throw new BadRequestException('Commande non trouvée');
     }
 
     if (order.status === OrderStatus.LIVRE) {
-      throw new Error('Impossible d\'annuler une commande déjà livrée');
+      throw new BadRequestException('Impossible d\'annuler une commande déjà livrée');
+    }
+
+    if (order.status === OrderStatus.ANNULE) {
+      return this.prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
+      });
     }
 
     // Use transaction to restore stock
@@ -286,6 +388,22 @@ export class OrderService {
       return prisma.order.update({
         where: { id: orderId },
         data: { status: OrderStatus.ANNULE },
+        include: {
+          items: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    include: {
+                      category: true,
+                    },
+                  },
+                  size: true,
+                },
+              },
+            },
+          },
+        },
       });
     });
   }
